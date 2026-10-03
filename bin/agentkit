@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# agentkit - copy shared skills, agent definitions and an AGENTS.md into a project.
+set -euo pipefail
+
+HOME_DIR="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+
+usage() {
+  cat <<EOF
+Usage:
+  agentkit list                      List available skills and agents
+  agentkit add [-f] [-d DIR] NAME... Copy skills/agents NAME into DIR (default: .)
+  agentkit init [-f] [DIR]           Create DIR/AGENTS.md from the template (default: .)
+
+  -f  Overwrite existing files (default: skip them)
+
+Source: $HOME_DIR
+
+Install locations in the target:
+  skill  -> .agents/skills/NAME/          (agy, vibe)
+            .claude/skills/NAME -> link   (claude)
+            skills/NAME/gitignore lines -> .gitignore (if missing)
+  agent  -> agents/NAME/claude.md -> .claude/agents/NAME.md
+            agents/NAME/agy.md    -> .agents/agents/NAME/agent.md
+            agents/NAME/vibe.toml -> .vibe/agents/NAME.toml
+EOF
+}
+
+list() {
+  echo "Skills:"
+  for d in "$HOME_DIR"/skills/*/; do [ -d "$d" ] && echo "  $(basename "$d")"; done
+  echo "Agents:"
+  for d in "$HOME_DIR"/agents/*/; do
+    [ -d "$d" ] && echo "  $(basename "$d") ($(ls "$d" | tr '\n' ' ' | sed 's/ $//'))"
+  done
+  return 0
+}
+
+FORCE=0
+
+# True (and reports) if $1 exists and must not be overwritten.
+skip_existing() {
+  if [ -e "$1" ] && [ "$FORCE" = 0 ]; then
+    echo "skip $1 (exists, use -f to overwrite)"
+    return 0
+  fi
+  return 1
+}
+
+# Append each line of $1 to $2/.gitignore unless that exact line is already there.
+add_gitignore() {
+  local src="$1" file="$2/.gitignore" line
+  [ -f "$src" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    [ -f "$file" ] && grep -qxF -- "$line" "$file" && continue
+    # Keep the new entry on its own line if the file lacks a trailing newline.
+    [ -s "$file" ] && [ -n "$(tail -c1 "$file")" ] && echo >> "$file"
+    echo "$line" >> "$file"
+    echo "gitignore $line -> .gitignore"
+  done < "$src"
+}
+
+add_skill() {
+  local name="$1" dir="$2"
+  add_gitignore "$HOME_DIR/skills/$name/gitignore" "$dir"
+  skip_existing "$dir/.agents/skills/$name" && return 0
+  mkdir -p "$dir/.agents/skills" "$dir/.claude/skills"
+  rm -rf "$dir/.agents/skills/$name"
+  cp -R "$HOME_DIR/skills/$name" "$dir/.agents/skills/$name"
+  ln -sfn "../../.agents/skills/$name" "$dir/.claude/skills/$name"
+  echo "skill $name -> .agents/skills/$name (+ .claude/skills link)"
+}
+
+add_agent() {
+  local name="$1" dir="$2" src="$HOME_DIR/agents/$1"
+  if [ -f "$src/claude.md" ] && ! skip_existing "$dir/.claude/agents/$name.md"; then
+    mkdir -p "$dir/.claude/agents"
+    cp "$src/claude.md" "$dir/.claude/agents/$name.md"
+    echo "agent $name -> .claude/agents/$name.md"
+  fi
+  if [ -f "$src/agy.md" ] && ! skip_existing "$dir/.agents/agents/$name/agent.md"; then
+    mkdir -p "$dir/.agents/agents/$name"
+    cp "$src/agy.md" "$dir/.agents/agents/$name/agent.md"
+    echo "agent $name -> .agents/agents/$name/agent.md"
+  fi
+  if [ -f "$src/vibe.toml" ] && ! skip_existing "$dir/.vibe/agents/$name.toml"; then
+    mkdir -p "$dir/.vibe/agents"
+    cp "$src/vibe.toml" "$dir/.vibe/agents/$name.toml"
+    echo "agent $name -> .vibe/agents/$name.toml"
+  fi
+}
+
+add() {
+  local dir="."
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -f) FORCE=1; shift ;;
+      -d) dir="$2"; shift 2 ;;
+      *) break ;;
+    esac
+  done
+  [ $# -gt 0 ] || { usage >&2; exit 1; }
+  [ -d "$dir" ] || { echo "No such directory: $dir" >&2; exit 1; }
+  for name in "$@"; do
+    local found=0
+    if [ -d "$HOME_DIR/skills/$name" ]; then add_skill "$name" "$dir"; found=1; fi
+    if [ -d "$HOME_DIR/agents/$name" ]; then add_agent "$name" "$dir"; found=1; fi
+    [ $found = 1 ] || { echo "Unknown skill or agent: $name (see: agentkit list)" >&2; exit 1; }
+  done
+}
+
+init() {
+  if [ "${1:-}" = "-f" ]; then FORCE=1; shift; fi
+  local dir="${1:-.}"
+  if skip_existing "$dir/AGENTS.md"; then
+    echo "Template: $HOME_DIR/templates/AGENTS.md"
+  else
+    cp "$HOME_DIR/templates/AGENTS.md" "$dir/AGENTS.md"
+    echo "created $dir/AGENTS.md"
+  fi
+  if [ -e "$dir/CLAUDE.md" ] && ! grep -q '@AGENTS.md' "$dir/CLAUDE.md"; then
+    echo "note: $dir/CLAUDE.md exists, so Claude Code ignores AGENTS.md. Add '@AGENTS.md' to CLAUDE.md."
+  fi
+}
+
+case "${1:-}" in
+  list) list ;;
+  add) shift; add "$@" ;;
+  init) shift; init "$@" ;;
+  *) usage ;;
+esac
