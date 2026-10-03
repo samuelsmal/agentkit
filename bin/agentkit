@@ -17,7 +17,7 @@ Source: $HOME_DIR
 
 Install locations in the target:
   skill  -> .agents/skills/NAME/          (agy, vibe)
-            .claude/skills/NAME -> link   (claude)
+            .claude/skills/NAME/          (claude)
             skills/NAME/gitignore lines -> .gitignore (if missing)
   agent  -> agents/NAME/claude.md -> .claude/agents/NAME.md
             agents/NAME/agy.md    -> .agents/agents/NAME/agent.md
@@ -61,14 +61,15 @@ add_gitignore() {
 }
 
 add_skill() {
-  local name="$1" dir="$2"
+  local name="$1" dir="$2" target
   add_gitignore "$HOME_DIR/skills/$name/gitignore" "$dir"
-  skip_existing "$dir/.agents/skills/$name" && return 0
-  mkdir -p "$dir/.agents/skills" "$dir/.claude/skills"
-  rm -rf "$dir/.agents/skills/$name"
-  cp -R "$HOME_DIR/skills/$name" "$dir/.agents/skills/$name"
-  ln -sfn "../../.agents/skills/$name" "$dir/.claude/skills/$name"
-  echo "skill $name -> .agents/skills/$name (+ .claude/skills link)"
+  for target in .agents/skills .claude/skills; do
+    skip_existing "$dir/$target/$name" && continue
+    mkdir -p "$dir/$target"
+    rm -rf "$dir/$target/$name"
+    cp -R "$HOME_DIR/skills/$name" "$dir/$target/$name"
+    echo "skill $name -> $target/$name"
+  done
 }
 
 add_agent() {
