@@ -1,0 +1,3 @@
+# Machine-local Claude config; agents may name internal projects (see claude/README.md).
+claude/.claude/settings.local.json
+claude/.claude/agents/
