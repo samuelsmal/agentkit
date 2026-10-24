@@ -62,7 +62,7 @@ add_gitignore() {
 }
 
 add_skill() {
-  local name="$1" dir="$2" target
+  local name="$1" dir="$2" target copied=0
   add_gitignore "$HOME_DIR/skills/$name/gitignore" "$dir"
   for target in .agents/skills .claude/skills; do
     skip_existing "$dir/$target/$name" && continue
@@ -70,8 +70,10 @@ add_skill() {
     rm -rf "$dir/$target/$name"
     cp -R "$HOME_DIR/skills/$name" "$dir/$target/$name"
     echo "skill $name -> $target/$name"
+    copied=1
   done
-  if [ -f "$dir/.agents/skills/$name/setup.sh" ]; then
+  # Run setup only after a fresh copy, so a skipped re-add has no side effects.
+  if [ "$copied" = 1 ] && [ -f "$dir/.agents/skills/$name/setup.sh" ]; then
     (cd "$dir" && bash ".agents/skills/$name/setup.sh")
   fi
 }
