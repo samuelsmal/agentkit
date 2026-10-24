@@ -9,9 +9,12 @@ usage() {
 Usage:
   agentkit list                      List available skills and agents
   agentkit add [-f] [-d DIR] NAME... Copy skills/agents NAME into DIR (default: .)
+  agentkit add -g [-f] NAME...       Link skills NAME into ~/.claude/skills (every session)
   agentkit init [-f] [DIR]           Create DIR/AGENTS.md from the template (default: .)
 
   -f  Overwrite existing files (default: skip them)
+  -g, --global  Link into ~/.claude/skills instead of copying into a project.
+                Edits in agentkit are live there. No gitignore lines, no setup.sh.
 
 Source: $HOME_DIR
 
@@ -78,6 +81,20 @@ add_skill() {
   fi
 }
 
+# Symlink skill $1 into ~/.claude/skills, so every Claude Code session sees it.
+add_global_skill() {
+  local name="$1" dest="$HOME/.claude/skills/$1" src="$HOME_DIR/skills/$1"
+  if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+    echo "skip $dest (already linked)"
+    return 0
+  fi
+  skip_existing "$dest" && return 0
+  mkdir -p "$HOME/.claude/skills"
+  rm -rf "$dest"
+  ln -s "$src" "$dest"
+  echo "skill $name -> $dest (link)"
+}
+
 add_agent() {
   local name="$1" dir="$2" src="$HOME_DIR/agents/$1"
   if [ -f "$src/claude.md" ] && ! skip_existing "$dir/.claude/agents/$name.md"; then
@@ -98,16 +115,24 @@ add_agent() {
 }
 
 add() {
-  local dir="."
+  local dir="." global=0
   while [ $# -gt 0 ]; do
     case "$1" in
       -f) FORCE=1; shift ;;
+      -g|--global) global=1; shift ;;
       -d) dir="$2"; shift 2 ;;
       *) break ;;
     esac
   done
   [ $# -gt 0 ] || { usage >&2; exit 1; }
   [ -d "$dir" ] || { echo "No such directory: $dir" >&2; exit 1; }
+  if [ $global = 1 ]; then
+    for name in "$@"; do
+      [ -d "$HOME_DIR/skills/$name" ] || { echo "Unknown skill: $name (--global takes skills only)" >&2; exit 1; }
+      add_global_skill "$name"
+    done
+    return 0
+  fi
   for name in "$@"; do
     local found=0
     if [ -d "$HOME_DIR/skills/$name" ]; then add_skill "$name" "$dir"; found=1; fi
