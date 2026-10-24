@@ -19,6 +19,7 @@ Install locations in the target:
   skill  -> .agents/skills/NAME/          (agy, vibe)
             .claude/skills/NAME/          (claude)
             skills/NAME/gitignore lines -> .gitignore (if missing)
+            skills/NAME/setup.sh runs in DIR after the copy (if present)
   agent  -> agents/NAME/claude.md -> .claude/agents/NAME.md
             agents/NAME/agy.md    -> .agents/agents/NAME/agent.md
             agents/NAME/vibe.toml -> .vibe/agents/NAME.toml
@@ -70,6 +71,9 @@ add_skill() {
     cp -R "$HOME_DIR/skills/$name" "$dir/$target/$name"
     echo "skill $name -> $target/$name"
   done
+  if [ -f "$dir/.agents/skills/$name/setup.sh" ]; then
+    (cd "$dir" && bash ".agents/skills/$name/setup.sh")
+  fi
 }
 
 add_agent() {

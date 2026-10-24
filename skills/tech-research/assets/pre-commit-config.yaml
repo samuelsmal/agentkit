@@ -1,0 +1,17 @@
+# Installed by agentkit (tech-research): rewrap Markdown to 100 chars, then fail on what is left.
+# Installed agent skills (.agents/, .claude/) are not project content, so they are left alone.
+exclude: ^\.(agents|claude)/
+repos:
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        args: [--wrap, "100", --number]
+        additional_dependencies: [mdformat-gfm==1.0.0, mdformat-frontmatter==2.1.2]
+  - repo: local
+    hooks:
+      - id: md-line-width
+        name: markdown line width (100)
+        entry: python3 .agents/skills/tech-research/scripts/check_md_width.py --max 100
+        language: system
+        types: [markdown]
