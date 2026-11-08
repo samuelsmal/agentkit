@@ -11,6 +11,9 @@ Usage:
   agentkit add [-f] [-d DIR] NAME... Copy skills/agents NAME into DIR (default: .)
   agentkit add -g [-f] NAME...       Link skills NAME into ~/.claude/skills (every session)
   agentkit init [-f] [DIR]           Create DIR/AGENTS.md from the template (default: .)
+  agentkit names [--skills]          Print skill and agent names, one per line
+  agentkit completion                Print the bash/zsh completion script
+                                     Enable: eval "\$(agentkit completion)"
 
   -f  Overwrite existing files (default: skip them)
   -g, --global  Link into ~/.claude/skills instead of copying into a project.
@@ -155,9 +158,62 @@ init() {
   fi
 }
 
+# Print skill names, and agent names unless $1 is --skills. Used by the completion script.
+names() {
+  local d
+  for d in "$HOME_DIR"/skills/*/; do [ -d "$d" ] && basename "$d"; done
+  if [ "${1:-}" != "--skills" ]; then
+    for d in "$HOME_DIR"/agents/*/; do [ -d "$d" ] && basename "$d"; done
+  fi
+  return 0
+}
+
+# Print a completion script for bash and zsh. Zsh runs it through bashcompinit.
+completion() {
+  cat <<'EOF'
+if [ -n "${ZSH_VERSION:-}" ]; then
+  (( $+functions[compdef] )) || { autoload -Uz compinit && compinit; }
+  autoload -Uz bashcompinit && bashcompinit
+fi
+
+_agentkit() {
+  local cur="${COMP_WORDS[COMP_CWORD]}" prev="${COMP_WORDS[COMP_CWORD-1]}" i flag=""
+  COMPREPLY=()
+  if [ "$COMP_CWORD" -eq 1 ]; then
+    COMPREPLY=($(compgen -W "list add init completion" -- "$cur"))
+    return
+  fi
+  case "${COMP_WORDS[1]}" in
+    add)
+      if [ "$prev" = "-d" ]; then
+        COMPREPLY=($(compgen -d -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "-f -g --global -d" -- "$cur"))
+      else
+        for ((i = 2; i < COMP_CWORD; i++)); do
+          case "${COMP_WORDS[i]}" in -g|--global) flag="--skills" ;; esac
+        done
+        COMPREPLY=($(compgen -W "$(agentkit names $flag)" -- "$cur"))
+      fi
+      ;;
+    init)
+      if [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "-f" -- "$cur"))
+      else
+        COMPREPLY=($(compgen -d -- "$cur"))
+      fi
+      ;;
+  esac
+}
+complete -F _agentkit agentkit
+EOF
+}
+
 case "${1:-}" in
   list) list ;;
   add) shift; add "$@" ;;
   init) shift; init "$@" ;;
+  names) shift; names "$@" ;;
+  completion) completion ;;
   *) usage ;;
 esac
